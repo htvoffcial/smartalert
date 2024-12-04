@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>通知システム</title>
+    <style>
+        /* 全画面を黒くする */
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: black;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+
+        #main_page {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: white;
+            color: black;
+        }
+
+        #main_page img {
+            max-width: 80%;
+            max-height: 80%;
+        }
+
+        #setting_page {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .slider-container {
+            margin: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="setting_page">
+        <h1>通知設定</h1>
+        <div class="slider-container">
+            <label for="frequency">周波数 (Hz):</label>
+            <input type="range" id="frequency" min="100" max="1000" step="10" value="440">
+            <span id="frequency_value">440 Hz</span>
+        </div>
+        <div class="upload-container">
+            <label for="upload_image">通知時に表示する画像:</label>
+            <input type="file" id="upload_image" accept="image/*">
+        </div>
+        <button id="start_button" class="button">通知を有効化</button>
+    </div>
+    <div id="main_page">
+        <img id="display_image" src="https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Japan_road_sign_327-No_Entry.svg/512px-Japan_road_sign_327-No_Entry.svg.png" alt="通知画像">
+        <button id="stop_button" class="button">停止</button>
+    </div>
+
+    <script>
+        const settingPage = document.getElementById("setting_page");
+        const mainPage = document.getElementById("main_page");
+        const startButton = document.getElementById("start_button");
+        const stopButton = document.getElementById("stop_button");
+        const frequencySlider = document.getElementById("frequency");
+        const frequencyValue = document.getElementById("frequency_value");
+        const uploadImage = document.getElementById("upload_image");
+        const displayImage = document.getElementById("display_image");
+        let audioContext, oscillator, intervalId;
+
+        // 周波数スライダーのリアルタイム更新
+        frequencySlider.addEventListener("input", () => {
+            frequencyValue.textContent = `${frequencySlider.value} Hz`;
+        });
+
+        // 画像アップロードと保存
+        uploadImage.addEventListener("change", (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    localStorage.setItem("notificationImage", e.target.result);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // スタートボタン押下時
+        startButton.addEventListener("click", () => {
+            // 初期化
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            settingPage.classList.add("hidden");
+            mainPage.style.display = "none";
+            document.body.style.backgroundColor = "black";
+
+            // Battery Status API チェック
+            if ('getBattery' in navigator) {
+                navigator.getBattery().then((battery) => {
+                    battery.onchargingchange = () => {
+                        if (!battery.charging) {
+                            playNotification();
+                        }
+                    };
+                });
+            } else {
+                alert("Battery Status APIがこのブラウザでサポートされていません。");
+            }
+        });
+
+        // 停止ボタン押下時
+        stopButton.addEventListener("click", () => {
+            if (intervalId) {
+                clearInterval(intervalId);
+                intervalId = null;
+            }
+            if (oscillator) {
+                oscillator.stop();
+                oscillator = null;
+            }
+            mainPage.style.display = "none";
+            document.body.style.backgroundColor = "black";
+        });
+
+        // 通知音と画像表示
+        function playNotification() {
+            // 画面を点灯し、画像を表示
+            const savedImage = localStorage.getItem("notificationImage");
+            if (savedImage) {
+                displayImage.src = savedImage;
+            }
+            mainPage.style.display = "flex";
+            document.body.style.backgroundColor = "white";
+
+            // 音を「ぴぴぴ」と鳴らす
+            if (!audioContext) return;
+            if (!oscillator) {
+                intervalId = setInterval(() => {
+                    if (oscillator) {
+                        oscillator.stop();
+                        oscillator = null;
+                    } else {
+                        oscillator = audioContext.createOscillator();
+                        oscillator.type = "sine";
+                        oscillator.frequency.setValueAtTime(frequencySlider.value, audioContext.currentTime);
+                        oscillator.connect(audioContext.destination);
+                        oscillator.start();
+                    }
+                }, 300); // 300msごとにオン・オフを切り替え
+            }
+        }
+    </script>
+</body>
+</html>
